@@ -4,10 +4,6 @@ import builtins
 import time
 import sys
 import datetime
-import collections
-import math
-from typing import Dict
-
 
 
 # instance methods
@@ -20,7 +16,7 @@ DATA_PACKET = {
     'MESSAGE': ''
 }
 
-def set_data() -> Dict:
+def set_data() -> dict:
     for key in list(DATA_PACKET.keys()):
         if '[x]' not in key: 
             needed_type = type(DATA_PACKET[key]).__name__
@@ -35,7 +31,7 @@ def set_data() -> Dict:
 NODE_LIST = []
 
 
-# Accesor Methods - Fetch value USE 'get_' for fetching
+# Accessor Methods - Fetch value USE 'get_' for fetching
 # Mutator Methods - Modify a value USE 'set_' for modifying something 
 
 # Extra function make it so that an object is self aware that it knows when another node has made a connection
@@ -50,8 +46,8 @@ if __name__ == '__main__':
             # Instance variables
             self.node_id = node_id
             self.connections = connections
+            self.discovered_connections = []
             self.buffer = []
-            self.duplication_activity = []
 
 
         def inject_packet(self, packet: dict):
@@ -89,40 +85,65 @@ if __name__ == '__main__':
 
         def get_congestion(self) -> int:
             return len(self.buffer)
+        
+        def get_new_connections(self) -> list:
+
+            test = []
+            temp = []
+
+            all_messages = list(str(self.buffer[i]['HISTORY[x]'])[:-1:] for i in range(self.get_congestion()))
+
+            for i in range(self.get_congestion()):
+                history_length = len(str(self.buffer[i]['HISTORY[x]']))
+                index = str(str(self.buffer[i]['HISTORY[x]'])[::-1])[1::].index('>')
+                test.append(str(all_messages[i])[len(all_messages[i]) - index::])
+
+            sorted_messages = list(set(test))
+
+            for val in sorted_messages:
+                if val not in self.connections:
+                    temp.append(val)
+            
+            self.discovered_connections = temp
 
 
         def get_duplicates(self) -> int:
-            x = []
-
-            for i in range(0, self.get_congestion()):
-                x.append(self.buffer[i]['HISTORY[x]'])
-
+            duplicate_messages = {}
             contains_duplicates = 0
 
-            for j in range(self.get_congestion()):
-                contains_duplicates += x.count(x[j])-1 if x.count(x[j]) > 1 else 0
+            all_messages = list(self.buffer[i]['MESSAGE'] for i in range(self.get_congestion()))
 
-            return contains_duplicates, x
+            sorted_messages = list(set(all_messages))
+            
+            for key in sorted_messages:
+                duplicate_messages[key] = ''
+
+            for message_ in sorted_messages:
+                contains_duplicates += all_messages.count(message_)-1
+                duplicate_messages[message_] = all_messages.count(message_)-1
+                    
+            return contains_duplicates, duplicate_messages
 
 
         def get_node_info(self) -> str:
             return(
                 f'\nID -                         {self.node_id}\n' \
                 f'IS_EMPTY? -                  {"YES" if self.get_congestion() == 0 else "NO"}\n' \
-                f'CONNECTIONS -                {self.connections}\n...\n' \
+                f'CONNECTIONS -                {self.connections}\n' \
+                f'DISCOVERED  -                {self.discovered_connections}\n...\n' \
                 f'ACTIVITY: \n' \
                 f'             /BUFFER:        {self.buffer}\n' \
                 f'             /CONGESTION:    {self.get_congestion()}\n' \
-                f'             /DUPLICATES:    {self.duplication_activity}\n'
+                f'             /DUPLICATES:    {self.get_duplicates()}\n'
                 )
 
     
     packet_handler = []
 
-    NODE_LIST.append(Node('A', ['B', 'C']))
-    NODE_LIST.append(Node('B', ['C', 'A']))
-    NODE_LIST.append(Node('C', ['A', 'B', 'D']))
-    NODE_LIST.append(Node('D', ['A', 'B']))
+    NODE_LIST.append(Node('A', ['BBB', 'C']))
+    NODE_LIST.append(Node('BBB', ['C', 'A']))
+    NODE_LIST.append(Node('C', ['A', 'BBB', 'D']))
+    NODE_LIST.append(Node('D', ['A', 'BBB']))
 
     print(list(NODE_LIST[0].get_connected_node_obj()))
 
@@ -213,13 +234,14 @@ if __name__ == '__main__':
         print('########################################################### - MOVE HELLO PACKET')
         NODE_LIST[2].next_hop()     # Should be in node b's buffer
 
-        NODE_LIST[0].inject_packet(set_data())
-        NODE_LIST[0].inject_packet(set_data())
-        print('>>>>>>>>>>>>>>', NODE_LIST[0].get_node_info())
-        print('>>>>>>>>>>>>>>', NODE_LIST[1].get_node_info())
-        print('>>>>>>>>>>>>>>', NODE_LIST[2].get_node_info())
-        print('>>>>>>>>>>>>>>', NODE_LIST[3].get_node_info())
+        # NODE_LIST[0].inject_packet(set_data())
+        # NODE_LIST[0].inject_packet(set_data())
+        # print('>>>>>>>>>>>>>>', NODE_LIST[0].get_node_info())
+        # print('>>>>>>>>>>>>>>', NODE_LIST[1].get_node_info())
+        # print('>>>>>>>>>>>>>>', NODE_LIST[2].get_node_info())
+        # print('>>>>>>>>>>>>>>', NODE_LIST[3].get_node_info())
 
-        print(NODE_LIST[0].get_duplicates())
+        NODE_LIST[3].get_new_connections()
+        print(NODE_LIST[3].discovered_connections)
 
         
