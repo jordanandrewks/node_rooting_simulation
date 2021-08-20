@@ -10,6 +10,8 @@ import datetime
 # class methods
 # static methods
 
+NODE_LIST = []
+
 DATA_PACKET = {
     'HOP_LIM': 5,
     'HISTORY[x]': '',
@@ -28,13 +30,6 @@ def set_data() -> dict:
 
     return DATA_PACKET
 
-NODE_LIST = []
-
-
-# Accessor Methods - Fetch value USE 'get_' for fetching
-# Mutator Methods - Modify a value USE 'set_' for modifying something 
-
-# Extra function make it so that an object is self aware that it knows when another node has made a connection
 
 if __name__ == '__main__':
 
@@ -48,6 +43,7 @@ if __name__ == '__main__':
             self.connections = connections
             self.discovered_connections = []
             self.buffer = []
+            self.null_list = []
 
 
         def inject_packet(self, packet: dict):
@@ -65,11 +61,23 @@ if __name__ == '__main__':
                         # yield index, node_obj.node_id
                         yield index
 
+        def find_depleted_packets(self):
+            self.null_list = []
+            for c in range(0, len(self.buffer)):
+                if self.buffer[c]['HOP_LIM'] == 0:
+                    self.null_list.append(c)
+            
+        def remove_depleted_packets(self):
+            for decrement, packet_index in enumerate(self.null_list):
+                self.buffer.pop(packet_index - decrement) 
 
         def next_hop(self):
             """ Send the packet to the next connections"""  
             print("I am <{}> and I'm connected to {}". format(self.node_id, self.connections))
-    
+
+            self.find_depleted_packets()
+            self.remove_depleted_packets()
+
             if self.buffer:     # Check if there's anything in THIS nodes buffer
 
                 self.buffer[0]['HISTORY[x]'] += self.node_id + '>'
@@ -86,25 +94,25 @@ if __name__ == '__main__':
         def get_congestion(self) -> int:
             return len(self.buffer)
         
-        def get_new_connections(self) -> list:
 
-            test = []
-            temp = []
+        def get_new_connections(self):
 
-            all_messages = list(str(self.buffer[i]['HISTORY[x]'])[:-1:] for i in range(self.get_congestion()))
-
+            recent_node_list = []
+            new_connections = []
+            history_list = list(str(self.buffer[i]['HISTORY[x]'])[:-1:] for i in range(self.get_congestion()))
+        
             for i in range(self.get_congestion()):
-                history_length = len(str(self.buffer[i]['HISTORY[x]']))
-                index = str(str(self.buffer[i]['HISTORY[x]'])[::-1])[1::].index('>')
-                test.append(str(all_messages[i])[len(all_messages[i]) - index::])
+                index = str(str(self.buffer[i]['HISTORY[x]'])[::-1])[1::].index('>')                # Index of the last seperator
+                recent_node_list.append(str(history_list[i])[len(history_list[i]) - index::])       # Perform string slice and return latest Node ID
 
-            sorted_messages = list(set(test))
+            sorted_node_id_list = list(set(recent_node_list))   # Remove any duplicates
 
-            for val in sorted_messages:
-                if val not in self.connections:
-                    temp.append(val)
+            # Append any new connections to the discovery list
+            for node in sorted_node_id_list:        
+                if node not in self.connections:
+                    new_connections.append(node)
             
-            self.discovered_connections = temp
+            self.discovered_connections = new_connections
 
 
         def get_duplicates(self) -> int:
@@ -146,6 +154,8 @@ if __name__ == '__main__':
     NODE_LIST.append(Node('D', ['A', 'BBB']))
 
     print(list(NODE_LIST[0].get_connected_node_obj()))
+
+
 
     debug = True
 
@@ -230,6 +240,7 @@ if __name__ == '__main__':
         print('>>>>>>>>>>>>>>', NODE_LIST[0].get_node_info())
         print('>>>>>>>>>>>>>>', NODE_LIST[1].get_node_info())
         print('>>>>>>>>>>>>>>', NODE_LIST[2].get_node_info())
+        print('>>>>>>>>>>>>>>', NODE_LIST[3].get_node_info())
 
         print('########################################################### - MOVE HELLO PACKET')
         NODE_LIST[2].next_hop()     # Should be in node b's buffer
@@ -245,3 +256,9 @@ if __name__ == '__main__':
         print(NODE_LIST[3].discovered_connections)
 
         
+        print('>>>>>>>>>>>>>>', NODE_LIST[0].get_node_info())
+        print('>>>>>>>>>>>>>>', NODE_LIST[1].get_node_info())
+        print('>>>>>>>>>>>>>>', NODE_LIST[2].get_node_info())
+        print('>>>>>>>>>>>>>>', NODE_LIST[3].get_node_info())
+
+        print('########################################################### - MOVE HELLO PACKET')
