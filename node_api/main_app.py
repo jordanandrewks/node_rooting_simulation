@@ -1,10 +1,9 @@
-from re import split
-import re
-import sys
 
+import threading
 import json
 from os import name
-from flask import Flask, request, jsonify
+from flask import Flask, request
+from flask.scaffold import F
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
@@ -17,18 +16,13 @@ db = SQLAlchemy(app)
 NODE_LIST = []
 
 DATA_PACKET = {
-    'HOP_LIM': 5,
-    'HISTORY[x]': '',
-    'MESSAGE': ''
+    'hop_lim': 5,
+    'history': '',
+    'message': ''
 }
 
-# Problem 1 - Ideally need to assign a list to the connections - Resolved Other approach taken
-# Problem 2 - We cannot access the instance variables in the class - Resolved
-# Problem 3 - Struggled to get connections with the same decalarations in SOLVED
-# Problem 4 - Id was a number, yet we still had the node_id variable, one is enough - SOLVED
-
 # Next Steps:
-# - Link Inject Packet function
+# - Link Inject Packet function COMPLETE
 # - 
 
 class Node(db.Model):
@@ -53,7 +47,14 @@ class NodeAsset:
         self.discovered_connections = []
         self.buffer = []
         self.null_list = []
+        self.transmitted = 0
+        self.received = 0
 
+    def reset(self):
+        self.buffer = []
+        self.null_list = []
+        self.transmitted = 0
+        self.received = 0
 
     def inject_packet(self, packet: dict):
         """Pass in the first packet"""
@@ -67,14 +68,13 @@ class NodeAsset:
             for index, node_obj in enumerate(list(NODE_LIST)):
                 if connected_node is node_obj.node_name:
                     count += 1
-                    # yield index, node_obj.node_name
                     yield index
 
 
     def find_depleted_packets(self):
         self.null_list = []
         for c in range(0, len(self.buffer)):
-            if self.buffer[c]['HOP_LIM'] == 0:
+            if self.buffer[c]['hop_lim'] == 0:
                 self.null_list.append(c)
         
 
@@ -93,13 +93,15 @@ class NodeAsset:
 
         if self.buffer:     # Check if there's anything in THIS nodes buffer
 
-            self.buffer[0]['HISTORY[x]'] += self.node_name + '>'
-            self.buffer[0]['HOP_LIM'] -= 1
+            self.buffer[0]['history'] += self.node_name + '>'
+            self.buffer[0]['hop_lim'] -= 1
 
             for node_index in list(self.get_connected_node_obj()):
                 print("I need to send to >>>>>", node_index)
-                if self.buffer[0]['HOP_LIM'] >= 0:
+                if self.buffer[0]['hop_lim'] >= 0:
                     NODE_LIST[node_index].buffer.append(self.buffer[0].copy())         # Move value to the next object
+                    NODE_LIST[node_index].received += 1        
+                    self.transmitted += 1
 
             self.buffer.pop(0)                                  # Remove this value from this object
 
@@ -111,11 +113,11 @@ class NodeAsset:
     def get_new_connections(self):
 
         recent_node_list = []
-        history_list = list(str(self.buffer[i]['HISTORY[x]'])[:-1:] for i in range(self.get_congestion()))
+        history_list = list(str(self.buffer[i]['history'])[:-1:] for i in range(self.get_congestion()))
         
         try:
             for i in range(self.get_congestion()):
-                index = str(str(self.buffer[i]['HISTORY[x]'])[::-1])[1::].index('>')                # Index of the last seperator
+                index = str(str(self.buffer[i]['history'])[::-1])[1::].index('>')                # Index of the last seperator
                 recent_node_list.append(str(history_list[i])[len(history_list[i]) - index::])       # Perform string slice and return latest Node ID
 
             sorted_node_name_list = list(set(recent_node_list))   # Remove any duplicates
@@ -134,7 +136,7 @@ class NodeAsset:
         duplicate_messages = {}
         contains_duplicates = 0
 
-        all_messages = list(self.buffer[i]['MESSAGE'] for i in range(self.get_congestion()))
+        all_messages = list(self.buffer[i]['message'] for i in range(self.get_congestion()))
 
         sorted_messages = list(set(all_messages))
         
@@ -148,24 +150,6 @@ class NodeAsset:
         return contains_duplicates, duplicate_messages
 
 
-    def get_node_info(self) -> str:
-        return(
-            f'\nID -                         {self.node_name}\n' \
-            f'IS_EMPTY? -                  {"YES" if self.get_congestion() == 0 else "NO"}\n' \
-            f'CONNECTIONS -                {self.connections}\n' \
-            f'DISCOVERED  -                {self.discovered_connections}\n...\n' \
-            f'ACTIVITY: \n' \
-            f'             /BUFFER:        {self.buffer}\n' \
-            f'             /CONGESTION:    {self.get_congestion()}\n' \
-            f'             /DUPLICATES:    {self.get_duplicates()}\n'
-            )
-    
-    def node_info(self):
-        return {
-            "node_name": self.node_name,
-            "empty":  r"{'YES' if self.get_congestion() == 0 else 'NO'}",
-            "connections": self.connections
-        }
 
 def watch():
     total = 0
@@ -173,7 +157,6 @@ def watch():
         total = 0
         for x in range(len(NODE_LIST)):
             NODE_LIST[x].next_hop()
-            print(NODE_LIST[x].get_node_info())
             if NODE_LIST[x].get_congestion() == 0: 
                 total += 1
 
@@ -288,7 +271,7 @@ Structure___
 
 """
 
-@app.route('/nodes/buffer/<node_id>', methods=['POST'])
+@app.route('/nodes/buffer/<node_id>', methods=['PUT'], methods=['POST'])
 def inject_data_packet(node_id):
     
     if len(NODE_LIST):
@@ -339,7 +322,6 @@ def get_all_buffer():
             output[node.node_name] = node.buffer
         return output
     return {"error": "no nodes"}
-
 
 
 @app.route('/nodes/buffer/<node_id>', methods=['GET'])
@@ -395,6 +377,132 @@ def clear_all_buffers():
         return {"message":"all buffers cleared"}
     return {"error": "no nodes"}
 
+
+@app.route('/nodes/hop', methods=['GET'])
+def next_hop():
+    for i in range(len(NODE_LIST)):
+                NODE_LIST[i].next_hop()
+    return {"message": "one hop complete"}
+
+
+@app.route('/nodes/hop/<node_id>', methods=['GET'])
+def next_node_hop(node_id):
+    nodes = []
+    # Extract all node names
+    if len(NODE_LIST):
+        for node in NODE_LIST:
+            nodes.append(node.node_name)
+            # Break here if found 
+            if node.node_name == node_id:
+                break
+
+        # Find the index location of the node_id in the list
+        try:
+            index = nodes.index(node_id)
+            NODE_LIST[index].next_hop()
+            print(NODE_LIST[index].buffer)
+            return {"message": "one hop complete", "congestion":f"{NODE_LIST[index].get_congestion()}"}
+        except:
+            return {"error": "node not found"}
+
+
+    return {"error": "no nodes"}
+
+
+
+"""
+Should present the following:
+
+node_name:
+connections:
+discovered_nodes:
+total_sent:
+total_received:
+congestion:
+"""
+@app.route('/nodes/status/<node_id>', methods=['GET'])
+def get_node_status(node_id):
+    nodes = []
+    # Extract all node names
+    if len(NODE_LIST):
+        for node in NODE_LIST:
+            nodes.append(node.node_name)
+            # Break here if found 
+            if node.node_name == node_id:
+                break
+        # Find the index location of the node_id in the list
+        try:
+            index = nodes.index(node_id)
+            node_ = NODE_LIST[index]
+            return {
+                f"id": f"{node_id}",
+                f"connections": f"{node_.connections}",
+                f"discovered": f"{node_.discovered_connections}",
+                f"total_sent": f"{node_.transmitted}",
+                f"total_received": f"{node_.received}",
+                f"congestion": f"{node_.get_congestion()}"
+                }
+        except:
+            return {"error": "node not found"}
+    return {"error": "no nodes"}
+
+
+@app.route('/nodes/status', methods=['GET'])
+def get_nodes_status():
+    pass
+
+
+
+"""
+Should return:
+- congestion only
+"""
+@app.route('/nodes/congestion/<node_id>', methods=['GET'])
+def get_node_congestion(node_id):
+    nodes = []
+    # Extract all node names
+    if len(NODE_LIST):
+        for node in NODE_LIST:
+            nodes.append(node.node_name)
+            # Break here if found 
+            if node.node_name == node_id:
+                break
+        # Find the index location of the node_id in the list
+        try:
+            index = nodes.index(node_id)
+            congestion = NODE_LIST[index].get_congestion()
+            return {f"{node_id}":congestion}
+        except:
+            return {"error": "node not found"}
+    return {"error": "no nodes"}
+    
+
+@app.route('/nodes/congestion', methods=['GET'])
+def get_congestion():
+    output = {}
+    # Extract all node names
+    if len(NODE_LIST):
+        for node in NODE_LIST:
+            output[node.node_name] = node.get_congestion()
+        return output
+    return {"error": "no nodes"}
+
+
+
+"""Required is:
+
+iteration_limit
+
+"""
+@app.route('/simulate/start', methods=['POST'])
+def start_simulation():
+    pass
+
+
+"""Return Total Time spent"""
+@app.route('/simulate/stop', methods=['GET'])
+def stop_simulation():
+    pass
 
 
 load_nodes()
