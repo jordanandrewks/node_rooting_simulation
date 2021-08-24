@@ -1,10 +1,14 @@
 
+import re
 import threading
 import json
 from os import name
 from flask import Flask, request
 from flask.scaffold import F
 from flask_sqlalchemy import SQLAlchemy
+
+WATCH_FLAG = False
+STOP_LIMIT = 0
 
 app = Flask(__name__)
 
@@ -85,7 +89,6 @@ class NodeAsset:
 
     def next_hop(self):
         """ Send the packet to the next connections"""  
-        print("I am <{}> and I'm connected to {}". format(self.node_name, self.connections))
 
         self.get_new_connections()
         self.find_depleted_packets()
@@ -97,7 +100,6 @@ class NodeAsset:
             self.buffer[0]['hop_lim'] -= 1
 
             for node_index in list(self.get_connected_node_obj()):
-                print("I need to send to >>>>>", node_index)
                 if self.buffer[0]['hop_lim'] >= 0:
                     NODE_LIST[node_index].buffer.append(self.buffer[0].copy())         # Move value to the next object
                     NODE_LIST[node_index].received += 1        
@@ -151,14 +153,6 @@ class NodeAsset:
 
 
 
-def watch():
-    total = 0
-    while total != len(NODE_LIST):
-        total = 0
-        for x in range(len(NODE_LIST)):
-            NODE_LIST[x].next_hop()
-            if NODE_LIST[x].get_congestion() == 0: 
-                total += 1
 
 
 
@@ -271,7 +265,7 @@ Structure___
 
 """
 
-@app.route('/nodes/buffer/<node_id>', methods=['PUT'], methods=['POST'])
+@app.route('/nodes/buffer/<node_id>', methods=['PUT', 'POST'])
 def inject_data_packet(node_id):
     
     if len(NODE_LIST):
@@ -489,20 +483,57 @@ def get_congestion():
 
 
 
-"""Required is:
+def watch():
+    global WATCH_FLAG
+    total = 0
+    count = 0
 
-iteration_limit
+    while total != len(NODE_LIST) and count != STOP_LIMIT and WATCH_FLAG:
+        total = 0
+        count += 1
+        print(count, STOP_LIMIT) 
+        for x in range(len(NODE_LIST)):
+            NODE_LIST[x].next_hop()
+            if NODE_LIST[x].get_congestion() == 0: 
+                total += 1
 
-"""
+    WATCH_FLAG = False
+
+
+
 @app.route('/simulate/start', methods=['POST'])
 def start_simulation():
-    pass
+    global WATCH_FLAG
+    global STOP_LIMIT
+
+    WATCH_FLAG = True
+    STOP_LIMIT = 0
+
+    try:
+        # Return a valid number
+        STOP_LIMIT = int(request.json['stop_lim'])
+    except ValueError:
+        # Return false value... i.e. Continue until done
+        STOP_LIMIT = -1
+
+    x = threading.Thread(target=watch)
+    x.start()
+    return {"message":"simulation running"}
+
+@app.route('simulate/start', methods=['PUT'])
+def update_stop_limit():
+    global STOP_LIMIT
+    STOP_LIMIT = request.json['stop_lim']
+    return {"message": "stop limit updated"}
+
 
 
 """Return Total Time spent"""
 @app.route('/simulate/stop', methods=['GET'])
 def stop_simulation():
-    pass
+    global WATCH_FLAG
+    WATCH_FLAG = False
+    return {"message":"simulation stop"}
 
 
 load_nodes()
