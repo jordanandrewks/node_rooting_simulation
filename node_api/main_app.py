@@ -329,6 +329,19 @@ def inject_data_packet(node_id):
 
 
 
+
+@app.route('/nodes/buffer', methods=['GET'])
+def get_all_buffer():
+    output = {}
+    # Extract all node names
+    if len(NODE_LIST):
+        for node in NODE_LIST:
+            output[node.node_name] = node.buffer
+        return output
+    return {"error": "no nodes"}
+
+
+
 @app.route('/nodes/buffer/<node_id>', methods=['GET'])
 def get_nodes_buffer(node_id):
     nodes = []
@@ -344,7 +357,7 @@ def get_nodes_buffer(node_id):
             index = nodes.index(node_id)
             node_buffer = NODE_LIST[index].buffer
             print(node_buffer)
-            return {"node_id":f"{node_id}", "buffer":node_buffer}
+            return {f"{node_id}":node_buffer}
         except:
             return {"error": "node not found"}
     return {"error": "no nodes"}
@@ -375,7 +388,6 @@ def clear_node_buffer(node_id):
 @app.route('/nodes/buffer', methods=['DELETE'])
 def clear_all_buffers():
     global NODE_LIST
-    nodes = []
     # Extract all node names
     if len(NODE_LIST):
         for node in NODE_LIST:
