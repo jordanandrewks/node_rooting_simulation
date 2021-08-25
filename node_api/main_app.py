@@ -1,5 +1,3 @@
-
-import re
 import threading
 import json
 from os import name
@@ -11,23 +9,12 @@ WATCH_FLAG = False
 STOP_LIMIT = 0
 
 app = Flask(__name__)
-
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///data.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
 NODE_LIST = []
-
-DATA_PACKET = {
-    'hop_lim': 5,
-    'history': '',
-    'message': ''
-}
-
-# Next Steps:
-# - Link Inject Packet function COMPLETE
-# - 
 
 class Node(db.Model):
 
@@ -151,9 +138,15 @@ class NodeAsset:
                 
         return contains_duplicates, duplicate_messages
 
-
-
-
+    def get_status(self) -> dict:
+        return {
+            f"id": f"{self.node_name}",
+            f"connections": f"{self.connections}",
+            f"discovered": f"{self.discovered_connections}",
+            f"total_sent": f"{self.transmitted}",
+            f"total_received": f"{self.received}",
+            f"congestion": f"{self.get_congestion()}"
+            }
 
 
 def load_nodes():
@@ -165,6 +158,40 @@ def load_nodes():
     except SQLAlchemy.exc.OperationalError:
         print('No DataBase')
 
+
+def return_one_node_obj(node_id):
+    nodes = []
+    # Extract all node names
+    if len(NODE_LIST):
+        for node in NODE_LIST:
+            nodes.append(node.node_name)
+            # Break here if found 
+            if node.node_name == node_id:
+                break
+        # Find the index location of the node_id in the list
+        try:
+            index = nodes.index(node_id)
+            return NODE_LIST[index]
+        except:
+            return {"error": "node not found"}
+    return {"error": "no nodes"}
+
+
+def watch():
+    global WATCH_FLAG
+    total = 0
+    count = 0
+
+    while total != len(NODE_LIST) and count != STOP_LIMIT and WATCH_FLAG:
+        total = 0
+        count += 1
+        print(count, STOP_LIMIT) 
+        for i in range(len(NODE_LIST)):
+            NODE_LIST[i].next_hop()
+            if NODE_LIST[i].get_congestion() == 0: 
+                total += 1
+
+    WATCH_FLAG = False
 
 
 @app.route('/nodes', methods=['POST'])
@@ -187,7 +214,6 @@ def add_node():
     return {"node_id":node.node_id, "connections":node.connections}
 
 
-
 @app.route('/nodes/<node_id>', methods=['GET'])
 def get_node(node_id):
 
@@ -197,7 +223,6 @@ def get_node(node_id):
 
     return {"node_id":node.node_id, "connections":node.connections}
  
-
 
 @app.route('/nodes', methods=['GET'])
 def get_nodes():
@@ -209,7 +234,6 @@ def get_nodes():
         output.append(node_data)
     
     return {"nodes": output}
-
 
 
 @app.route('/nodes/<node_id>', methods=['DELETE'])
@@ -245,71 +269,59 @@ def delete_nodes():
     return {"message": "no nodes to delete"}, 200
 
 
-
 @app.route('/nodes/connections')
-def debugger():
-    print('LENGTH OF NODE LIST =======', len(NODE_LIST))
+def get_connections():
+
     output = {}
+
     for i in range(0, len(NODE_LIST)):
-        print(f'<<<<<<<<<?>>>>', NODE_LIST[i].node_name, NODE_LIST[i].connections)
         output[NODE_LIST[i].node_name] = NODE_LIST[i].connections
     return output
 
 
-
 """
 Structure___
-
 "hop_lim": "something",
 "message": "something"
-
 """
-
 @app.route('/nodes/buffer/<node_id>', methods=['PUT', 'POST'])
 def inject_data_packet(node_id):
     
-    if len(NODE_LIST):
+    message = ''
+
+    try:
+        hop_limit = int(request.json['hop_lim'])  
+
+        # Expect KeyError in case of an empty message
         try:
-            nodes = []
-            message = ''
-            index = False
+            message = request.json['message']
+        except KeyError:
+            pass
 
-            # Expect KeyError in case of an empty message
-            try:
-                message = request.json['message']
-            except KeyError:
-                pass
+        node = return_one_node_obj(node_id)
 
-            hop_limit = int(request.json['hop_lim'])        
+        if type(node).__name__ == 'dict':
+            # Return the Error message 
+            return node
+        else:
 
-            # Extract all node names
-            for node in NODE_LIST:
-                nodes.append(node.node_name)
-                if node.node_name == node_id:
-                    break
+            node.inject_packet({
+                "hop_lim": int(hop_limit),
+                "history": "",
+                "message": str(message)
+                })
+            
+            return {"message": "packet added"}, 200
 
-            # Find the index location of the node_id in the list
-            try:
-                index = nodes.index(node_id)
-                NODE_LIST[index].inject_packet({
-                        "hop_lim": int(hop_limit),
-                        "history": "",
-                        "message": str(message)
-                        })
-                print(NODE_LIST[index].buffer)
-                return {"message": "packet added"}, 200
-            except ValueError:
-                return {"error": "node not found"}
-        except ValueError:
-            return {"error": "non integer values entered for hop_lim"}
-    return {"error": "no nodes"}
-
-
+    except ValueError:
+        return {"error": "non integer values entered for hop_lim"}
 
 
 @app.route('/nodes/buffer', methods=['GET'])
 def get_all_buffer():
+
     output = {}
+
     # Extract all node names
     if len(NODE_LIST):
         for node in NODE_LIST:
@@ -320,45 +332,27 @@ def get_all_buffer():
 
 @app.route('/nodes/buffer/<node_id>', methods=['GET'])
 def get_nodes_buffer(node_id):
-    nodes = []
-    # Extract all node names
-    if len(NODE_LIST):
-        for node in NODE_LIST:
-            nodes.append(node.node_name)
-            # Break here if found 
-            if node.node_name == node_id:
-                break
-        # Find the index location of the node_id in the list
-        try:
-            index = nodes.index(node_id)
-            node_buffer = NODE_LIST[index].buffer
-            print(node_buffer)
-            return {f"{node_id}":node_buffer}
-        except:
-            return {"error": "node not found"}
-    return {"error": "no nodes"}
+
+    node = return_one_node_obj(node_id)
+
+    if type(node).__name__ == 'dict':
+        # Return the Error message 
+        return node
+    else:
+        return {f"{node_id}":node.buffer}
 
 
 @app.route('/nodes/buffer/<node_id>', methods=['DELETE'])
 def clear_node_buffer(node_id):
-    global NODE_LIST
-    nodes = []
-    # Extract all node names
-    if len(NODE_LIST):
-        for node in NODE_LIST:
-            nodes.append(node.node_name)
-            # Break here if found 
-            if node.node_name == node_id:
-                break
 
-        # Find the index location of the node_id in the list
-        try:
-            index = nodes.index(node_id)
-            NODE_LIST[index].buffer = []
-            return {"message":"buffer cleared"}
-        except:
-            return {"error": "node not found"}
-    return {"error": "no nodes"}
+    node = return_one_node_obj(node_id)
+
+    if type(node).__name__ == 'dict':
+        # Return the Error message 
+        return node
+    else:
+        node.buffer = []
+        return {"message":"buffer cleared"}
 
 
 @app.route('/nodes/buffer', methods=['DELETE'])
@@ -381,124 +375,68 @@ def next_hop():
 
 @app.route('/nodes/hop/<node_id>', methods=['GET'])
 def next_node_hop(node_id):
-    nodes = []
-    # Extract all node names
-    if len(NODE_LIST):
-        for node in NODE_LIST:
-            nodes.append(node.node_name)
-            # Break here if found 
-            if node.node_name == node_id:
-                break
 
-        # Find the index location of the node_id in the list
-        try:
-            index = nodes.index(node_id)
-            NODE_LIST[index].next_hop()
-            print(NODE_LIST[index].buffer)
-            return {"message": "one hop complete", "congestion":f"{NODE_LIST[index].get_congestion()}"}
-        except:
-            return {"error": "node not found"}
+    node = return_one_node_obj(node_id)
+
+    if type(node).__name__ == 'dict':
+        # Return the Error message 
+        return node
+    else:
+        node.next_hop()
+        return {
+            "message": "one hop complete", 
+            "congestion":f"{node.get_congestion()}"
+            }
 
 
-    return {"error": "no nodes"}
-
-
-
-"""
-Should present the following:
-
-node_name:
-connections:
-discovered_nodes:
-total_sent:
-total_received:
-congestion:
-"""
 @app.route('/nodes/status/<node_id>', methods=['GET'])
 def get_node_status(node_id):
-    nodes = []
-    # Extract all node names
-    if len(NODE_LIST):
-        for node in NODE_LIST:
-            nodes.append(node.node_name)
-            # Break here if found 
-            if node.node_name == node_id:
-                break
-        # Find the index location of the node_id in the list
-        try:
-            index = nodes.index(node_id)
-            node_ = NODE_LIST[index]
-            return {
-                f"id": f"{node_id}",
-                f"connections": f"{node_.connections}",
-                f"discovered": f"{node_.discovered_connections}",
-                f"total_sent": f"{node_.transmitted}",
-                f"total_received": f"{node_.received}",
-                f"congestion": f"{node_.get_congestion()}"
-                }
-        except:
-            return {"error": "node not found"}
-    return {"error": "no nodes"}
+
+    node = return_one_node_obj(node_id)
+
+    if type(node).__name__ == 'dict':
+        # Return the Error message 
+        return node
+    else:
+        return node.get_status()
 
 
 @app.route('/nodes/status', methods=['GET'])
 def get_nodes_status():
-    pass
+    
+    output = {}
 
-
-
-"""
-Should return:
-- congestion only
-"""
-@app.route('/nodes/congestion/<node_id>', methods=['GET'])
-def get_node_congestion(node_id):
-    nodes = []
     # Extract all node names
     if len(NODE_LIST):
         for node in NODE_LIST:
-            nodes.append(node.node_name)
-            # Break here if found 
-            if node.node_name == node_id:
-                break
-        # Find the index location of the node_id in the list
-        try:
-            index = nodes.index(node_id)
-            congestion = NODE_LIST[index].get_congestion()
-            return {f"{node_id}":congestion}
-        except:
-            return {"error": "node not found"}
+            output[node.node_name] = node.get_status()
+        return output
     return {"error": "no nodes"}
+
+
+@app.route('/nodes/congestion/<node_id>', methods=['GET'])
+def get_node_congestion(node_id):
+
+    node = return_one_node_obj(node_id)
+
+    if type(node).__name__ == 'dict':
+        # Return the Error message 
+        return node
+    else:
+        return {"congestion":f"{node.get_congestion()}"}
     
 
 @app.route('/nodes/congestion', methods=['GET'])
 def get_congestion():
+
     output = {}
+
     # Extract all node names
     if len(NODE_LIST):
         for node in NODE_LIST:
             output[node.node_name] = node.get_congestion()
         return output
     return {"error": "no nodes"}
-
-
-
-def watch():
-    global WATCH_FLAG
-    total = 0
-    count = 0
-
-    while total != len(NODE_LIST) and count != STOP_LIMIT and WATCH_FLAG:
-        total = 0
-        count += 1
-        print(count, STOP_LIMIT) 
-        for x in range(len(NODE_LIST)):
-            NODE_LIST[x].next_hop()
-            if NODE_LIST[x].get_congestion() == 0: 
-                total += 1
-
-    WATCH_FLAG = False
-
 
 
 @app.route('/simulate/start', methods=['POST'])
@@ -516,16 +454,16 @@ def start_simulation():
         # Return false value... i.e. Continue until done
         STOP_LIMIT = -1
 
-    x = threading.Thread(target=watch)
-    x.start()
+    simulate_thread = threading.Thread(target=watch)
+    simulate_thread.start()
     return {"message":"simulation running"}
 
-@app.route('simulate/start', methods=['PUT'])
+
+@app.route('/simulate/start', methods=['PUT'])
 def update_stop_limit():
     global STOP_LIMIT
     STOP_LIMIT = request.json['stop_lim']
     return {"message": "stop limit updated"}
-
 
 
 """Return Total Time spent"""
