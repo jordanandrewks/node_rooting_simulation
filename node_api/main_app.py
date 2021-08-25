@@ -1,5 +1,6 @@
 import threading
 import json
+import time
 from os import name
 from flask import Flask, request
 from flask.scaffold import F
@@ -190,6 +191,8 @@ def watch():
             NODE_LIST[i].next_hop()
             if NODE_LIST[i].get_congestion() == 0: 
                 total += 1
+            if WATCH_FLAG == False:
+                break
 
     WATCH_FLAG = False
 
@@ -212,6 +215,29 @@ def add_node():
     NODE_LIST.append(NodeAsset(node_name=node.node_id, connections=str(node.connections).split(',')))
 
     return {"node_id":node.node_id, "connections":node.connections}
+
+
+@app.route('/nodes/<node_id>', methods=['PUT'])
+def update_node_connections(node_id):
+
+    node_obj = return_one_node_obj(node_id)
+
+    if type(node_obj).__name__ == 'dict':
+        # Return the Error message 
+        return node_obj
+    else:
+
+        node = Node.query.filter_by(node_id=node_id).first()
+        
+        node.connections = request.json['connections']
+        
+        db.session.commit()
+
+        node_obj.connections = str(request.json['connections']).split(',')
+
+        return {"message":"node connection's updated"}
+
+
 
 
 @app.route('/nodes/<node_id>', methods=['GET'])
@@ -439,11 +465,19 @@ def get_congestion():
     return {"error": "no nodes"}
 
 
+open_threads = []
+
 @app.route('/simulate/start', methods=['POST'])
 def start_simulation():
     global WATCH_FLAG
     global STOP_LIMIT
 
+    # Close the thread if it's open
+    if WATCH_FLAG:
+        WATCH_FLAG = False
+
+    time.sleep(1)
+    
     WATCH_FLAG = True
     STOP_LIMIT = 0
 
@@ -454,8 +488,10 @@ def start_simulation():
         # Return false value... i.e. Continue until done
         STOP_LIMIT = -1
 
+
     simulate_thread = threading.Thread(target=watch)
     simulate_thread.start()
+
     return {"message":"simulation running"}
 
 
