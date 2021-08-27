@@ -8,8 +8,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-NODE_LIST = []
-
 class NodeModel(db.Model):
 
     id = db.Column(db.String(80), primary_key=True, unique=True, nullable=False)    

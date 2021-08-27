@@ -1,4 +1,4 @@
-NODE_LIST = []
+# from controller_global_defs import *
 
 class NodeObj:
 
@@ -29,6 +29,7 @@ class NodeObj:
 
     def get_connected_node_obj(self):
         """ return the object of the node"""
+        from main_app import NODE_LIST
         count = 0
         for connected_node in self.connections:
             for index, node_obj in enumerate(list(NODE_LIST)):
@@ -51,6 +52,7 @@ class NodeObj:
 
     def next_hop(self):
         """ Send the packet to the next connections"""  
+        from main_app import NODE_LIST
 
         self.get_new_connections()
         self.find_depleted_packets()
