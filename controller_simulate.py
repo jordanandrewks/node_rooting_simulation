@@ -1,8 +1,20 @@
+"""
+FILE:           controller_simulate.py
+DESCRIPTION:
+/simulate endpoints located here.
+Responsible for handling the node simulation.
+"""
+
 import time
 from flask import request
 from model_class_NodeModel import app
 from data_transfer_object import DataTransferObject as dto
 
+
+"""
+REQUEST STRUCTURE:
+"stop_lim": "<int>"
+"""
 @app.route('/simulate/start', methods=['POST'])
 def start_simulation():
     from main_app import open_simulation_thread
@@ -31,6 +43,10 @@ def start_simulation():
     return dto.good_message("simulation running")
 
 
+"""
+REQUEST STRUCTURE:
+"stop_lim": "<int>"
+"""
 @app.route('/simulate/start', methods=['PUT'])
 def update_stop_limit():
     global STOP_LIMIT

@@ -1,3 +1,9 @@
+"""
+FILE:           data_transfer_object.py
+DESCRIPTION:
+class for defining structured data objects messages.
+"""
+
 import json
 
 class DataTransferObject:

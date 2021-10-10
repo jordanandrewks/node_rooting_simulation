@@ -1,5 +1,5 @@
 """
-FILE:   main_app.py
+FILE:           main_app.py
 DESCRIPTION:
 Main file used to load out of the database,
 and run threads for simulation tasks.
@@ -51,7 +51,7 @@ def return_one_node_obj(node_id):
             # Send back the object -> class
             return NODE_LIST[index]     
         except:
-            # Send back a dto response
+            # Send back a DTO response
             return dto.error_message("node not found")
     return dto.error_message("no nodes")
 

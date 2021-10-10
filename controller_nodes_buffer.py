@@ -1,11 +1,16 @@
+"""
+FILE:           controller_nodes_buffer.py
+DESCRIPTION:
+/nodes/buffer endpoints located here.
+"""
+
 from flask import request
-# from model_class_NodeModel import NodeModel
 from model_class_NodeModel import *
 from controller_class_NodeObj import *
 from data_transfer_object import DataTransferObject as dto
 
 """
-Structure___
+REQUEST STRUCTURE:
 "hop_lim": "something",
 "message": "something"
 """
